@@ -102,6 +102,7 @@ static struct argp_option options[] = {
    { "trigger",      't',"ADDRESS",                   0, "Trigger on address."},
    { "bbcfwa",       'f',        0,                   0, "Show BBC floating poing work areas."},
    { "bbctube",       8,         0,                   0, "Decode BBC tube protocol"},
+   { "hex-prefix",   'X', "PREFIX", OPTION_ARG_OPTIONAL, "Use prefix for hex operands (\"&\" if no arg provided)"},
 
    { 0 }
 };
@@ -134,6 +135,7 @@ struct arguments {
    int trigger_stop;
    int trigger_skipint;
    char *filename;
+   const char *hex_prefix;
 } arguments;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -270,6 +272,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          argp_error(state, "undocumented and c02 flags mutually exclusive");
       }
       arguments->undocumented = 1;
+      break;
+   case 'X':
+      if (arg && strlen(arg) > 0) {
+         arguments->hex_prefix = arg;
+      } else {
+         arguments->hex_prefix = "&";
+      }
       break;
    case ARGP_KEY_ARG:
       arguments->filename = arg;
@@ -501,6 +510,8 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
          } else {
             const char *mnemonic = instr->mnemonic;
             const char *fmt = instr->fmt;
+            /* printf("%s %d\n",mnemonic,instr->mode); */
+            /* fflush(stdout); */
             switch (instr->mode) {
             case IMP:
             case IMPA:
@@ -516,7 +527,7 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
                      sprintf(target,"pc+%d", offset);
                   }
                } else {
-                  sprintf(target, "%04X", (pc + 2 + offset) & 0xffff);
+                  sprintf(target, "%s%04X", arguments.hex_prefix, (pc + 2 + offset) & 0xffff);
                }
                numchars = printf(fmt, mnemonic, target);
                break;
@@ -530,9 +541,9 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
                      sprintf(target,"pc+%d", offset);
                   }
                } else {
-                  sprintf(target, "%04X", (pc + 3 + offset) & 0xffff);
+                  sprintf(target, "%s%04X", arguments.hex_prefix, (pc + 3 + offset) & 0xffff);
                }
-               numchars = printf(fmt, mnemonic, op1, target);
+               numchars = printf(fmt, mnemonic, arguments.hex_prefix, op1, target);
                break;
             case IMM:
             case ZP:
@@ -541,14 +552,14 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
             case INDX:
             case INDY:
             case IND:
-               numchars = printf(fmt, mnemonic, op1);
+               numchars = printf(fmt, mnemonic, arguments.hex_prefix, op1);
                break;
             case ABS:
             case ABSX:
             case ABSY:
             case IND16:
             case IND1X:
-               numchars = printf(fmt, mnemonic, op1, op2);
+               numchars = printf(fmt, mnemonic, arguments.hex_prefix, op1, op2);
                break;
             }
          }
@@ -1289,6 +1300,7 @@ int main(int argc, char *argv[]) {
    arguments.trigger_stop     = -1;
    arguments.trigger_skipint  = 0;
    arguments.filename         = NULL;
+   arguments.hex_prefix       = "";
 
    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
