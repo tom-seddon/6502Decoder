@@ -103,6 +103,8 @@ static struct argp_option options[] = {
    { "bbcfwa",       'f',        0,                   0, "Show BBC floating poing work areas."},
    { "bbctube",       8,         0,                   0, "Decode BBC tube protocol"},
    { "hex-prefix",   'X', "PREFIX", OPTION_ARG_OPTIONAL, "Use prefix for hex operands (\"&\" if no arg provided)"},
+   { "ea",           'E',        0,                   0, "Show effective address"},
+   { "operand",      'O',        0,                   0, "Show operand value"},
 
    { 0 }
 };
@@ -136,6 +138,10 @@ struct arguments {
    int trigger_skipint;
    char *filename;
    const char *hex_prefix;
+    int hex_prefix_len;//not actually an argument, but where's better
+                       //for it?
+    int show_ea;
+    int show_operand;
 } arguments;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -279,7 +285,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       } else {
          arguments->hex_prefix = "&";
       }
+      arguments->hex_prefix_len = (int)strlen(arguments->hex_prefix);
       break;
+   case 'E':
+       arguments->show_ea = 1;
+       break;
+   case 'O':
+       arguments->show_operand = 1;
+       break;
    case ARGP_KEY_ARG:
       arguments->filename = arg;
       break;
@@ -344,6 +357,10 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
       pc = -1;
    }
 
+   int ea = -1;
+   int operand = -1;
+   int show_operand = 0;
+   
    if (rst_seen) {
       // Handlea reset
       if (do_emulate) {
@@ -359,11 +376,11 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
       // Emulate the instruction
       if (do_emulate) {
          if (instr->emulate) {
-            int operand;
             if (instr->optype == RMWOP) {
                // e.g. <opcode> <op1> <op2> <read> <write> <write>
                // Want to pick off the read
                operand = (accumulator >> 16) & 0xff;
+               show_operand = 1;
             } else if (instr->optype == BRANCHOP) {
                // the operand is true if branch taken
                operand = (num_cycles != 2);
@@ -395,11 +412,16 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
             } else {
                // default to using the last bus cycle as the operand
                operand = accumulator & 0xff;
+
+               /* Of limited use for many BIT instructions, though
+                * handy for BIT. */
+               show_operand = (instr->optype == READOP &&
+                               instr->mode != IMP &&
+                               instr->mode != IMPA);
             }
 
             // For instructions that read or write memory, we need to work out the effective address
             // Note: not needed for stack operations, as S is used directly
-            int ea = -1;
             int index;
             switch (instr->mode) {
             case ZP:
@@ -565,11 +587,30 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
          }
       }
       // Pad if there is more to come
-      if (fail || arguments.show_cycles || arguments.show_state || arguments.show_bbcfwa) {
+      if (fail || arguments.show_ea || arguments.show_cycles || arguments.show_state || arguments.show_bbcfwa) {
          // Pad opcode to 14 characters, to match python
          while (numchars++ < 14) {
             printf(" ");
          }
+      }
+      // Show effective address. Use inconsistent notation, so it's
+      // easy to search for.
+      if (arguments.show_ea) {
+          if (ea >= 0) {
+              printf("[%s%04X]", arguments.hex_prefix, ea);
+          } else {
+              // +1 for [, +4 for hex output, +1 for ]
+              printf("%-*s", 1 + arguments.hex_prefix_len + 4 + 1, "");
+          }
+      }
+
+      if(arguments.show_operand) {
+          if (show_operand && operand >= 0) {
+              printf("{%s%02X}", arguments.hex_prefix, operand);
+          } else {
+              // +1 for {, +4 for hex output, +1 for }
+              printf("%-*s", 1 + arguments.hex_prefix_len + 2 + 1, "");
+          }
       }
       // Show cycles (don't include with fail as it is inconsistent depending on whether rdy is present)
       if (arguments.show_cycles) {
@@ -1301,6 +1342,8 @@ int main(int argc, char *argv[]) {
    arguments.trigger_skipint  = 0;
    arguments.filename         = NULL;
    arguments.hex_prefix       = "";
+   arguments.show_ea          = 0;
+   arguments.show_operand     = 0;
 
    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
