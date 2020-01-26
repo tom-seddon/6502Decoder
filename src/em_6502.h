@@ -1,7 +1,7 @@
 #ifndef _INCLUDE_EM_6502_H
 #define _INCLUDE_EM_6502_H
 
-void em_init(int support_c02, int support_rockwell, int support_undocumented, int decode_bbctube);
+void em_init(int support_c02, int support_rockwell, int support_undocumented, int decode_bbctube, int decode_b_romsel);
 
 void em_reset();
 
@@ -34,6 +34,8 @@ int em_read_memory(int address);
 char *em_get_state();
 
 char *em_get_fwa(int a_sign, int a_exp, int a_mantissa, int a_round, int a_overflow);
+
+int em_get_B_ROMSEL(void);
 
 int em_get_and_clear_fail();
 

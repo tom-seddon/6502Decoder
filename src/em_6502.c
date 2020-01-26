@@ -7,6 +7,7 @@
 
 static int c02;
 static int bbctube;
+static int b_romsel;
 
 AddrModeType addr_mode_table[] = {
    {1,    "%1$s"},                      // IMP
@@ -74,6 +75,7 @@ static void op_STX(int operand, int ea);
 static void op_STY(int operand, int ea);
 
 static int memory[0x10000];
+static int b_romsel_value = -1;
 
 static void memory_read(int data, int ea) {
    // TODO: allow memory bounds to be passed in as a command line parameter
@@ -101,6 +103,8 @@ static void memory_write(int data, int ea) {
    }
    if (bbctube && ea >= 0xfee0 && ea <= 0xfee7) {
       tube_write(ea & 7, data);
+   } else if (b_romsel && ea >= 0xfe30 && ea <= 0xfe3f) {
+      b_romsel_value = data;
    }
 }
 
@@ -257,6 +261,10 @@ int em_get_Y() {
 
 int em_get_S() {
    return S;
+}
+
+int em_get_B_ROMSEL(void) {
+   return b_romsel_value;
 }
 
 int em_read_memory(int address) {
@@ -1600,11 +1608,13 @@ static InstrType instr_table_6502[] = {
 
 static char ILLEGAL[] = "???";
 
-void em_init(int support_c02, int support_rockwell, int support_undocumented, int decode_bbctube) {
+void em_init(int support_c02, int support_rockwell, int support_undocumented, int decode_bbctube, int decode_b_romsel) {
    int i;
    c02 = support_c02;
    instr_table = support_c02 ? instr_table_65c02 : instr_table_6502;
    bbctube = decode_bbctube;
+   b_romsel = decode_b_romsel;
+   
    // If not supporting the Rockwell C02 extensions, tweak the cycle countes
    if (support_c02 && !support_rockwell) {
       // x7 (RMB/SMB): 5 cycles -> 1 cycles

@@ -105,7 +105,7 @@ static struct argp_option options[] = {
    { "hex-prefix",   'X', "PREFIX", OPTION_ARG_OPTIONAL, "Use prefix for hex operands (\"&\" if no arg provided)"},
    { "ea",           'E',        0,                   0, "Show effective address"},
    { "operand",      'O',        0,                   0, "Show operand value"},
-
+   { "b-romsel",     9,          0,                   0, "Track BBC B ROMSEL accesses"},
    { 0 }
 };
 
@@ -138,10 +138,11 @@ struct arguments {
    int trigger_skipint;
    char *filename;
    const char *hex_prefix;
-    int hex_prefix_len;//not actually an argument, but where's better
+   int hex_prefix_len;//not actually an argument, but where's better
                        //for it?
-    int show_ea;
-    int show_operand;
+   int show_ea;
+   int show_operand;
+   int b_romsel;
 } arguments;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -198,6 +199,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       break;
    case   8:
       arguments->bbctube = 1;
+      break;
+   case   9:
+      arguments->b_romsel = 1;
       break;
    case 'c':
       if (arguments->undocumented) {
@@ -596,12 +600,27 @@ static void analyze_instruction(int opcode, int op1, int op2, uint64_t accumulat
       // Show effective address. Use inconsistent notation, so it's
       // easy to search for.
       if (arguments.show_ea) {
-          if (ea >= 0) {
-              printf("[%s%04X]", arguments.hex_prefix, ea);
-          } else {
-              // +1 for [, +4 for hex output, +1 for ]
-              printf("%-*s", 1 + arguments.hex_prefix_len + 4 + 1, "");
-          }
+         if (ea >= 0) {
+            printf("[");
+            if (arguments.b_romsel) {
+               int romsel = em_get_B_ROMSEL();
+               if (romsel >= 0) {
+                  printf("%x`", romsel);
+               } else {
+                  printf("?`");
+               }
+            }
+            printf("%s%04X]", arguments.hex_prefix, ea);
+         } else {
+            // +1 for [, +4 for hex output, +1 for ]
+            int n = 1 + arguments.hex_prefix_len + 4 + 1;
+            if (arguments.b_romsel) {
+               // +2 for prefix
+               n += 2;
+            }
+              
+            printf("%-*s", n, "");
+         }
       }
 
       if(arguments.show_operand) {
@@ -1344,7 +1363,8 @@ int main(int argc, char *argv[]) {
    arguments.hex_prefix       = "";
    arguments.show_ea          = 0;
    arguments.show_operand     = 0;
-
+   arguments.b_romsel         = 0;
+   
    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
    arguments.show_something = arguments.show_address | arguments.show_hex | arguments.show_instruction | arguments.show_state | arguments.show_bbcfwa | arguments.show_cycles;
@@ -1378,7 +1398,7 @@ int main(int argc, char *argv[]) {
          return 2;
       }
    }
-   em_init(arguments.c02, arguments.rockwell, arguments.undocumented, arguments.bbctube);
+   em_init(arguments.c02, arguments.rockwell, arguments.undocumented, arguments.bbctube, arguments.b_romsel);
    decode(stream);
    fclose(stream);
 
